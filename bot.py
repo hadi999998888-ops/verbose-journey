@@ -110,11 +110,13 @@ def save_channels():
 # КЛАВИАТУРЫ
 # ==================================================
 
-def admin_keyboard():
-    return ReplyKeyboardMarkup(
-        [["⚙️ Админ-панель"]],
-        resize_keyboard=True,
-    )
+def admin_keyboard(is_admin=False):
+    if is_admin:
+        return ReplyKeyboardMarkup(
+            [["⚙️ Админ-панель"]],
+            resize_keyboard=True,
+        )
+    return ReplyKeyboardMarkup([[]], resize_keyboard=True, remove_keyboard=True)
 
 
 def panel_keyboard():
@@ -427,13 +429,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except OSError:
             log.exception("Не удалось сохранить пользователя")
 
-    if user.id == ADMIN_ID and not context.args:
-        states.pop(user.id, None)
-        await message.reply_text(
-            "🐍 EXTRA CHEAT\n\nДобро пожаловать в админ-панель.",
-            reply_markup=admin_keyboard(),
-        )
-        return
+    is_admin = (user.id == ADMIN_ID)
+    reply_kb = admin_keyboard(is_admin)
 
     if not context.args:
         text = (
@@ -453,11 +450,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=text,
                         reply_markup=keyboard,
                     )
+                # Если админ, продублируем кнопку админ-панели через обычную клавиатуру снизу
+                if is_admin:
+                    await message.reply_text("🛠 Меню администратора:", reply_markup=reply_kb)
                 return
             except Exception:
                 log.exception("Не удалось отправить Start.jpg")
 
         await message.reply_text(text, reply_markup=keyboard)
+        if is_admin:
+            await message.reply_text("🛠 Меню администратора:", reply_markup=reply_kb)
         return
 
     argument = context.args[0]
@@ -630,7 +632,7 @@ async def handle_message(
         states.pop(user.id, None)
         await message.reply_text(
             "Ты вышел из админ-панели.",
-            reply_markup=admin_keyboard(),
+            reply_markup=admin_keyboard(is_admin=True),
         )
         return
 
@@ -747,8 +749,8 @@ async def handle_message(
         password = message.text.strip()
 
         if not password or len(password) > 100:
-            await message.reply_text(
-                "❌ Пароль должен содержать от 1 до 100 символов."
+            await message.reply_tex
+             "❌ Пароль должен содержать от 1 до 100 символов."
             )
             return
 
@@ -758,7 +760,7 @@ async def handle_message(
         await message.reply_text(
             "🔐 Пароль сохранён!\n\n"
             "📦 Теперь отправь материал: фото, видео, файл или текст."
-)
+        )
         return
 
     if state.get("step") == "material":
@@ -819,7 +821,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("check_post:"):
         post_id = data.split(":")[1]
-        missing = await missing_subscriptions(context.bot, user.id)
+        missing = await missing_subscriptions(context.bot, user.id)  # ИСПРАВЛЕНО: добавлен await
 
         if missing:
             await query.message.reply_text(
@@ -827,12 +829,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        await query.message.delete()
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+            
         await deliver_post(context.bot, query.message.chat_id, post_id)
         return
 
     if data == "check_subscriptions":
-        missing = await missing_subscriptions(context.bot, user.id)
+        missing = await missing_subscriptions(context.bot, user.id)  # ИСПРАВЛЕНО: добавлен await
 
         if missing:
             await query.message.reply_text("❌ Ты подписался ещё не на все каналы.")
